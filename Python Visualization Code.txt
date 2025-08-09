@@ -1,0 +1,31 @@
+#Import important libraries
+import matplotlib.pyplot as plt
+
+
+#Terms and their corresponding frequencies
+terms = [
+    "sales", "nurse", "technology", "construction", "engineer",
+    "manufacturing", "recruitment", "finance", "logistics", "teacher"
+]
+
+frequencies = [
+    212911, 135601, 74946, 74239, 51295, 44963, 42265, 19256, 11317, 7766
+]
+
+
+#Create the pie chart
+plt.figure(figsize=(8, 8))
+wedges, texts, autotexts = plt.pie(frequencies, labels=terms, autopct='%1.1f%%', startangle=140)
+
+
+#Add a legend for the pie chart
+plt.legend(wedges, terms, title="Terms", loc="center left", bbox_to_anchor=(1.2, 0, 0.5, 1))
+
+
+#Title for the chart
+plt.title('Top 10 Term Frequency Distribution\n')
+plt.axis('equal')  # Equal aspect ratio ensures that pie chart is drawn as a circle.
+
+
+#Show the pie chart
+plt.show()
