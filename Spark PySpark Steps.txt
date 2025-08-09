@@ -1,0 +1,117 @@
+#Change Root user to user Hadoop 
+root@ip-172-31-92-231:~$ sudo su — hadoop 
+
+
+#Make new working directory
+hadoop@ip-172-31-92-231:~$ mkdir assignmentbigdata
+
+
+#Change current directory to new working directory
+hadoop@ip-172-31-92-231:~$ cd assignmentbigdata
+
+
+#Get the url of uploaded dataset from the bucket created in S3 being stored as local file
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ wget https://bigdatadataset1.s3.us-east-1.amazonaws.com/JobSummary500000.csv
+
+
+#Initiate Hadoop Services within cluster
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ start-dfs.sh
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ start-yarn.sh
+
+#Create folder in HDFS server within cluster (with -p runs command if doesn't exist)
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ hdfs dfs -mkdir -p /inputdataset
+
+
+#Copy and put the local file into HDFS into path of folder created
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ hdfs dfs —put ~/assignmentbigdata/JobSummary500000.csv /inputdataset/job_count.csv
+
+
+#Check the contents in the path of the folder created for verification
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ hdfs dfs —ls /inputdataset
+
+
+#Initialize Spark to start an interactive spark shell
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ pyspark
+
+   _____                  __  
+  / ___/____  ____ ______/ /__
+  \__ \/ __ \/ __ `/ ___/ //_/
+ ___/ / /_/ / /_/ / /  / ,<   
+/____/ .___/\__,_/_/  /_/|_|  	version 3.4.1
+    /_/                       
+
+
+#Define and load the copied file in HDFS with header to read data
+>>> df = spark.read.option("header", "true").csv("hdfs:///inputdataset/job_count.csv")
+
+
+#Inspect the data being read by showing the first 5 rows without truncate
+>>> df.show(5, truncate = False)
+
+
+#Import libraries from built-in pyspark sql functions
+>>> from pyspark.sql.functions import col, explode, lower, trim, split
+
+
+#Define variable to Map reduce word count from job_summary column
+>>> words_df = df.select(explode(split(lower(df["job_summary"]), "\\s+")).alias("word"))
+
+
+#Filter and remove empty strings
+>>> words_df = words_df.filter(col("word") != "")
+
+
+#Inspect the map reduce output by showing the top 10 words in terms of count without truncate
+>>> words_df.groupBy("word").count().orderBy("count", ascending=False).show(10, truncate=False)
+
+
+#Assign variable to store the output results of the map reduce word count
+>>> word_counts = words_df.groupBy("word").count().orderBy("count", ascending=False).show(10, truncate=False)
+
+
+#Format word_counts as a single column of strings
+>>> word_strings = word_counts.select(concat_ws(",", "word", "count").alias("line"))
+
+
+#Save and export the output results as text file given path directory
+>>> word_strings.coalesce(1).write.text("file:///home/hadoop/count_txt")
+
+
+#Define another variable to count the frequencies of the top job seeking terms based on Malaysia
+>>> target_words = ["technology", "finance", "engineer", "nurse", "sales", "teacher", "manufacturing", "construction", "logistics", "recruitment"]
+
+
+#Filter and the select strings that are found in target words
+>>> words_df = words_df.filter(col("word").isin(target_words))
+
+
+#Assign variable to store the output results of the top job seeking term count frequencies
+>>> words_counts = filtered_words.groupBy("word").count().orderBy("count", ascending=False)
+
+
+#Inspect the map reduce output by showing the frequency count of the top 10 job seeking term
+>>> words_counts.show(10, truncate=FaIse) 
+
+
+#Import necessary libraries
+>>> import os, shutil
+
+
+#Verify the output results is saved and exported into text file by listing the files in given path directory
+>>> os.listdir("/home/hadoop/count_txt")
+
+
+#Remove part file to final output within pyspark environment for easier access
+>>> shutil.move("/home/hadoop/count_txt/part-00000-e4a77e80-f27f-4cff-80c9-680f97566088-c000.txt", "/home/hadoop/count.txt")
+
+
+#Exit Spark
+>>> exit()
+
+
+#Upload text file into bucket created in S3
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ aws s3 cp ~/word_freq.txt s3://bigdatadataset1/count.txt
+
+
+#Reinitialize spark for further analysis
+

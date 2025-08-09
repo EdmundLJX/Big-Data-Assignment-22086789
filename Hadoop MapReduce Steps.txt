@@ -1,0 +1,133 @@
+#Switch to Hadoop user to run Hadoop commands
+sudo su - hadoop
+
+
+#Get the url of uploaded dataset from the bucket created in S3 being stored as local file
+wget https://bigdatadataset1.s3.us-east-1.amazonaws.com/JobSummary500000.csv
+
+
+#Start HDFS (Hadoop Distributed FileSystem) services
+start-dfs.sh
+
+
+#Start YARN (Yet Another Resource Negotiator) services
+start-yarn.sh
+
+
+#Check the running Java processes to confirm Hadoop is running
+jps
+
+
+#Create an input directory on HDFS where your dataset will be stored
+hdfs dfs -mkdir /input
+
+
+#Upload the JobSummary500000.csv file to the HDFS input directory
+hdfs dfs -put JobSummary500000.csv /input/
+
+
+#Open WordCount.java file to write the MapReduce code
+nano WordCount.java
+
+
+#Paste MapReduce Java code
+import java.io.IOException;
+import java.util.StringTokenizer;
+ 
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+ 
+public class WordCount {
+  public static class TokenizerMapper
+       extends Mapper<Object, Text, Text, IntWritable>{
+ 
+    private final static IntWritable one = new IntWritable(1);
+    private Text word = new Text();
+ 
+    public void map(Object key, Text value, Context context
+                    ) throws IOException, InterruptedException {
+      StringTokenizer itr = new StringTokenizer(value.toString());
+      while (itr.hasMoreTokens()) {
+        word.set(itr.nextToken().toLowerCase().replaceAll("[^a-zA-Z]", ""));
+        context.write(word, one);
+      }
+    }
+  }
+ 
+  public static class IntSumReducer
+       extends Reducer<Text,IntWritable,Text,IntWritable> {
+    private IntWritable result = new IntWritable();
+ 
+    public void reduce(Text key, Iterable<IntWritable> values,
+                       Context context
+                       ) throws IOException, InterruptedException {
+      int sum = 0;
+      for (IntWritable val : values) {
+        sum += val.get();
+      }
+      result.set(sum);
+      context.write(key, result);
+    }
+  }
+ 
+  public static void main(String[] args) throws Exception {
+    Configuration conf = new Configuration();
+    Job job = Job.getInstance(conf, "word count");
+    job.setJarByClass(WordCount.class);
+    job.setMapperClass(TokenizerMapper.class);
+    job.setCombinerClass(IntSumReducer.class);
+    job.setReducerClass(IntSumReducer.class);
+    job.setOutputKeyClass(Text.class);
+    job.setOutputValueClass(IntWritable.class);
+    FileInputFormat.addInputPath(job, new Path(args[0]));
+    FileOutputFormat.setOutputPath(job, new Path(args[1]));
+    System.exit(job.waitForCompletion(true) ? 0 : 1);
+  }
+}
+
+
+#Compile the WordCount Java code into bytecode using Hadoop classpath
+javac -classpath `hadoop classpath` WordCount.java
+
+
+#Create a JAR file containing the compiled WordCount class files
+jar cf wordcount.jar WordCount*.class
+
+
+#Run the WordCount MapReduce job using the uploaded input dataset and output directory in HDFS
+hadoop jar wordcount.jar WordCount /user/hadoop/input /user/hadoop/output
+
+
+#List the contents of the output directory to verify the job output
+#This is optional
+#hdfs dfs -ls /user/hadoop/output
+
+
+#Sort the output file by frequency (second column), in descending order, and show top 10 words
+sort -k2 -nr output.txt | head -n 10
+
+
+#Calculate the total word count from the output file and display it
+total_all=$(awk '{sum += $2} END {print sum}' output.txt)
+echo "Total words in output.txt: $total_all"
+echo ""
+
+
+#Define a list of keywords related to jobs (e.g., technology, finance, etc.)
+#For each word, count its occurrence in output.txt
+for word in technology finance engineer nurse sales teacher manufacturing construction logistics recruitment
+do
+  total=$(grep -i "$word" output.txt | awk '{sum += $2} END {print sum}')
+  echo "$word: $total"
+done
+
+
+#Upload the final output.txt file to your S3 bucket for storage
+aws s3 cp output.txt s3://assignment1st/output.txt
