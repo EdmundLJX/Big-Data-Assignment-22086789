@@ -35,17 +35,17 @@ hadoop@ip-172-31-92-231:~/assignmentbigdata$ hadoop-daemon.sh start datanode
 hadoop@ip-172-31-92-231:~/assignmentbigdata$ yarn-daemon.sh start nodemanager
 
 
-#Create a directory named /inputdataset in HDFS to store the input file for the MapReduce job
+#Create a directory named /input in HDFS to store the input file for the MapReduce job
 #The -p flag ensures parent directories are created if they don't exist
 hadoop@ip-172-31-92-231:~/assignmentbigdata$ hdfs dfs -mkdir -p /user/hadoop/input
 
 
 #Upload the local dataset file JobSummary500000.csv from the EC2 instance into HDFS
-#Store it in the /inputdataset directory with the name job_count.csv
+#Store it in the /input directory with the name job_count.csv
 hadoop@ip-172-31-92-231:~/assignmentbigdata$ hdfs dfs -put ~/assignmentbigdata/JobSummary500000.csv /user/hadoop/input/job_count.csv
 
 
-#List the contents of the /inputdataset directory in HDFS
+#List the contents of the /input directory in HDFS
 hadoop@ip-172-31-92-231:~/assignmentbigdata$ hdfs dfs -ls /user/hadoop/input
 
 
