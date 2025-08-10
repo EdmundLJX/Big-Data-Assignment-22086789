@@ -1,36 +1,59 @@
-#Switch to Hadoop user to run Hadoop commands
-sudo su - hadoop
+#Switch to the Hadoop user
+root@ip-172-31-92-231:~# sudo su - hadoop
 
 
-#Get the url of uploaded dataset from the bucket created in S3 being stored as local file
-wget https://bigdatadataset1.s3.us-east-1.amazonaws.com/JobSummary500000.csv
+#Create a workspace and move into it
+hadoop@ip-172-31-92-231:~$ mkdir assignmentbigdata
+hadoop@ip-172-31-92-231:~$ cd assignmentbigdata
 
 
-#Start HDFS (Hadoop Distributed FileSystem) services
-start-dfs.sh
+#Download dataset from S3 bucket to the EC2 local disk
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ wget https://bigdatadataset1.s3.us-east-1.amazonaws.com/JobSummary500000.csv
 
 
-#Start YARN (Yet Another Resource Negotiator) services
-start-yarn.sh
+#List the files in the current directory
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ ls
 
 
-#Check the running Java processes to confirm Hadoop is running
-jps
+#Start the Hadoop Distributed File System (HDFS) services
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ start-dfs.sh
 
 
-#Create an input directory on HDFS where your dataset will be stored
-hdfs dfs -mkdir /input
+#Start the YARN (Yet Another Resource Negotiator) services
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ start-yarn.sh
 
 
-#Upload the JobSummary500000.csv file to the HDFS input directory
-hdfs dfs -put JobSummary500000.csv /input/
+#List all running Java processes to verify that Hadoop daemons are active
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ jps
 
 
-#Open WordCount.java file to write the MapReduce code
-nano WordCount.java
+#Start the DataNode process manually if it is not active
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ hadoop-daemon.sh start datanode
 
 
-#Paste MapReduce Java code
+#Start the NodeManager process manually if it is not active
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ yarn-daemon.sh start nodemanager
+
+
+#Create a directory named /inputdataset in HDFS to store the input file for the MapReduce job
+#The -p flag ensures parent directories are created if they don't exist
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ hdfs dfs -mkdir -p /user/hadoop/input
+
+
+#Upload the local dataset file JobSummary500000.csv from the EC2 instance into HDFS
+#Store it in the /inputdataset directory with the name job_count.csv
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ hdfs dfs -put ~/assignmentbigdata/JobSummary500000.csv /user/hadoop/input/job_count.csv
+
+
+#List the contents of the /inputdataset directory in HDFS
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ hdfs dfs -ls /user/hadoop/input
+
+
+#Open or create the WordCount.java file to write or edit the MapReduce program
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ nano WordCount.java
+
+
+#MapReduce program code
 import java.io.IOException;
 import java.util.StringTokenizer;
  
@@ -93,41 +116,57 @@ public class WordCount {
 }
 
 
-#Compile the WordCount Java code into bytecode using Hadoop classpath
-javac -classpath `hadoop classpath` WordCount.java
+#Compile the WordCount.java source file using the Hadoop classpath
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ javac -classpath "$(hadoop classpath)" WordCount.java
 
 
-#Create a JAR file containing the compiled WordCount class files
-jar cf wordcount.jar WordCount*.class
+#Package all compiled WordCount*.class files into a JAR file named wordcount.jar
+#This JAR will be used to run the MapReduce job in Hadoop
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ jar cf wordcount.jar WordCount*.class
 
 
-#Run the WordCount MapReduce job using the uploaded input dataset and output directory in HDFS
-hadoop jar wordcount.jar WordCount /user/hadoop/input /user/hadoop/output
+#Remove existing output directory in HDFS
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ hdfs dfs -rm -r -f /user/hadoop/output
+
+
+#Run the MapReduce job using the compiled JAR (wordcount.jar)
+#/user/hadoop/input  -> HDFS directory containing the input dataset
+#/user/hadoop/output -> HDFS directory where the job results will be stored
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ hadoop jar wordcount.jar WordCount /user/hadoop/input /user/hadoop/output
 
 
 #List the contents of the output directory to verify the job output
 #This is optional
-#hdfs dfs -ls /user/hadoop/output
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ hdfs dfs -ls /user/hadoop/output
 
 
-#Sort the output file by frequency (second column), in descending order, and show top 10 words
-sort -k2 -nr output.txt | head -n 10
+#Merge HDFS output into a single local file
+hdfs dfs -getmerge /user/hadoop/output output.txt
+
+
+#Sort the local output.txt file in descending numerical order
+#Then display only the top 10 most frequent words
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ sort -k2 -nr output.txt | head -n 10
 
 
 #Calculate the total word count from the output file and display it
-total_all=$(awk '{sum += $2} END {print sum}' output.txt)
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ total_all=$(awk '{sum += $2} END {print sum}' output.txt)
 echo "Total words in output.txt: $total_all"
 echo ""
 
 
-#Define a list of keywords related to jobs (e.g., technology, finance, etc.)
+#Define a list of keywords related to jobs (such as technology, finance, etc.)
 #For each word, count its occurrence in output.txt
-for word in technology finance engineer nurse sales teacher manufacturing construction logistics recruitment
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ for word in technology finance engineer nurse sales teacher manufacturing construction logistics recruitment
 do
   total=$(grep -i "$word" output.txt | awk '{sum += $2} END {print sum}')
   echo "$word: $total"
 done
 
 
+#List the details of the local output.txt file
+ls -lh output.txt
+
+
 #Upload the final output.txt file to your S3 bucket for storage
-aws s3 cp output.txt s3://assignment1st/output.txt
+hadoop@ip-172-31-92-231:~/assignmentbigdata$ aws s3 cp output.txt s3://bigdatadataset1/output.txt
